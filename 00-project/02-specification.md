@@ -223,6 +223,7 @@ A szerver és a kliens állapotegyeztetése batchek segítségével történik. 
 
 A kliens és a szerver kommunikációja három fázisból áll.
 1. Fázis - Csatlakozás:
+ 
 	- A kliens:
 		- Elhelyezi a MSGTYPE mezőben a CONNREQ flaget
 		- A timestamp mezőben az aktuális idejét
@@ -239,7 +240,7 @@ A kliens és a szerver kommunikációja három fázisból áll.
 	
 	Kétféle kommunikáció lehetséges: Validálás, Hirdetés
 	
-	**Validálás:
+	**Validálás:**
 	- Kliens:
 		- A MSGTYPE mezőben elhelyezi a VALIDATE flaget
 		- A timestamp mezőben az aktuális időt
@@ -251,13 +252,14 @@ A kliens és a szerver kommunikációja három fázisból áll.
 		- Ha minden bemenet vérehajtható, akkor kihirdeti az állapotot
 		- Ha nem, akkor elhelyezi a MSGTYPE mezőben a DENY flaget, a batch id mezőben a megtagadott batch azonosítóját
 	
-	 **Kihirdetés:
+	 **Kihirdetés:**
 	- Szerver:
 		- A MSGTYPE mezőben elhelyezi a STATE flaget
 		- A timestamp mezőben az aktuális időt
 		- Az adatmezőben a teljes játékállapotot
 	
 3. Fázis - Kilépés
+
 	A kliens:
 	- Elhelyezi a MSGTYPE mezőben az EXIT flaget
 	- Elküldi a szervernek
