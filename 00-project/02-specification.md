@@ -25,7 +25,9 @@ A projekt elsősorban azt vizsgálja, hogy a megvalósított szinkronizációs t
 ### Szinkronizációs stratégia működésének megfigyelése
 
 **Szereplő:** Megfigyelő
+
 **Előfeltétel:** nincs
+
 **Fő folyamat:**
 
 ```mermaid
@@ -43,8 +45,8 @@ K --> L{Valasz az esemenyre}
 L --> a[Elutasitott bemenet]
 a --> b[Allapot visszaallitasa]
 L --> c[elfogadott bemenet]
-c --> I
-b --> I
+c --> H
+b --> H
 ```
 
 
@@ -104,7 +106,7 @@ Sikeres csatlakozás esetén az első felület eltűnik és megjelenik a játék
 | Követelmény           | Ellenőrzés módja                                                                                                                          |
 | --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
 | Csalók elleni védelem | Amikor egy játékos csatlakozik a játékhoz a szerver generál neki egy egyedi azonosítót. Minden üzenetében el kell helyeznie ezt a számot. |
-| Kompatibilitás        | A rendszer összes komponensét teszteli kell linux és windows környezetekben                                                               |
+| Kompatibilitás        | A rendszer összes komponensét tesztelni kell linux és windows környezetekben                                                              |
 | Teljesítmény          | A demonstrátornak biztosítania kell a minimum 60 FPS-t                                                                                    |
 ## 7. Nyitott kérdések és kockázatok?
 
@@ -156,7 +158,7 @@ A harckocsik mozgása összetett.
 
 Minden játékos 10 lőszerrel kezdi a játékot. A lövések utáni újratöltési idő 10 másodperc.
 
-### 3. Kliensoldali előrejelzés
+### 2. Kliensoldali előrejelzés
 
 A demonstrátor fő feladata, hogy fogadja a klienstől a bemeneteket.
 
@@ -173,7 +175,31 @@ Azok a bemenetek, amiket a kliensnek továbbítania kell:
 - Olyan akció ami a torony forgatásával jár (egér mozgás)
 - Bal egérgomb lenyomása (lövés, újratöltési időzítő elindítása)
 
-### 4. Szerver
+Az állapotegyeztetés menete:
+- A kliens fogadja a szervertől a mérvadó állapotot
+- Ha az adat egy, a klienstől független játékbeli objektum mozgása (ellenséges tank, lövedék) :
+	- Az üzenetből kinyerni az objektum frissített információit
+	- Az objektum előző állapotát elmenteni egy átmeneti tárolóhelyben
+	- A friss állapotot elhelyezi az objektum adatstruktúrájában
+	- A gameloopban a megfelelő frissítési eljárással megjeleníteni az objektumot
+- Ha az adat a kliensre utal:
+	- Ha a szerver megtagadja az egyik batchet, akkor az összes azutánit invalidálnia kell
+		- Az üzenet adatrészében kiküldött játékállapothoz azonnal igazítania magát
+	- Ha a szerver engedélyezi a bemenetet, akkor a bemeneteket tároló adatstruktúrát frissíti
+
+**Példa az állapotegyeztetésre:**
+
+Adott egy ellenséges tank az alábbi koordinátákkal: (90;100)
+Adott egy frissítés a tank új pozíciójáról: (91;100)
+
+Az állapotegyeztetés menete:
+1. A régi és az új koordináták segítségével elmozdulási vektor készítése
+2. Ha a tank mozgatására használt vektor elfordulási szöge nem egyezik meg az új elmozdulási vektorral, akkor azt az utóbbihoz igazítja
+3. Meghatározni, hogy hányszor kell használni az új vektort, hogy az új pozícióba kerüljön az objektum
+4. Az objektum mozgatása az új pozíciója felé
+5. Az objektum megjelenítése az új paraméterei szerint
+
+### 3. Szerver
 
 A szerver felelőssége az, hogy a kliensektől érkező adatokat (mozgás, lövés, stb) ellenőrizze, ha lehetséges alkalmazza. Az ellenőrzés során feltett legfontosabb kérdések:
 
@@ -192,6 +218,53 @@ A szerver további feladata az, hogy az olyan eseményekről is tájékoztassa a
 - Játékos kilövése esetén: a frissített pálya
 
 A szerver és a kliens állapotegyeztetése batchek segítségével történik. A kliens fix időközönként küldi el a batcheket, ami tartalmazza a feljegyzett bemeneteit és a sequence numbert. A szerver a válaszában megadja a batch azonosítóját, illetve azt, hogy mely bemeneteket ismerte el. Ha egy bemenetet elutasított, akkor az utána következő összes bemenetet a kliensnek elutasítottként kell kezelnie és le kell kérdeznie a játékállapotot.
+
+### 4. Egyszerű protokoll leírása
+
+A kliens és a szerver kommunikációja három fázisból áll.
+1. Fázis - Csatlakozás:
+	- A kliens:
+		- Elhelyezi a MSGTYPE mezőben a CONNREQ flaget
+		- A timestamp mezőben az aktuális idejét
+	- A szerver:
+		- Generál a kliensnek egy egyedi azonosítót és elhelyezi a megfelelő adatstruktúrájában a kliensről az információt
+		- Generál egy 32 bites számot, ami azt adja meg, hogy a kliens honnan kezdje a csomagjainak a számozását
+		- Beállítja a MSGTYPE mezőben a CONNACK flaget
+		- Ha nem tudja fogadni a klienst, akkor CONNDENY flaget
+	- A kliens:
+		- Ha a MSGTYPE mezőben CONNACK flaget lát, akkor kiolvassa a szerver által kiküldött adminisztratív információkat
+		- Egy SYN üzenettel lekéri az aktuális játékállapotot
+	
+2. Fázis - Játék
+	
+	Kétféle kommunikáció lehetséges: Validálás, Hirdetés
+	
+	**Validálás:
+	- Kliens:
+		- A MSGTYPE mezőben elhelyezi a VALIDATE flaget
+		- A timestamp mezőben az aktuális időt
+		- A batch id mezőben elhelyezi az aktuális batch idt
+		- Az adatmezőben a batch tartalmát
+	- Szerver:
+		- Fogadja a VALIDATE üzenetet
+		- Végigmegy a bemeneteken, ellenőrzi, hogy végrehajtható-e az adott bemenet
+		- Ha minden bemenet vérehajtható, akkor kihirdeti az állapotot
+		- Ha nem, akkor elhelyezi a MSGTYPE mezőben a DENY flaget, a batch id mezőben a megtagadott batch azonosítóját
+	
+	 **Kihirdetés:
+	- Szerver:
+		- A MSGTYPE mezőben elhelyezi a STATE flaget
+		- A timestamp mezőben az aktuális időt
+		- Az adatmezőben a teljes játékállapotot
+	
+3. Fázis - Kilépés
+	A kliens:
+	- Elhelyezi a MSGTYPE mezőben az EXIT flaget
+	- Elküldi a szervernek
+	A szerver:
+	- Elhelyezi a MSGTYPE mezőben az ACK_EXIT flaget
+
+
 
 ### 5. Szinkronizációs technika
 
